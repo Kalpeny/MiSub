@@ -64,6 +64,15 @@ jobs:
             exit 0
           fi
 
+          # 检查 fork main 上是否有上游没有的提交。直接 git reset --hard upstream/main
+          # 会静默丢弃这些提交（例如本地为降低 Workers KV 写入量做的 FRESH_TTL 调整），
+          # 因此改为失败退出，由人工决定是 rebase 还是明确放弃。
+          if ! git merge-base --is-ancestor "${ORIGIN_SHA}" "${UPSTREAM_SHA}"; then
+            echo "::error title=Fork Sync aborted::fork main (${ORIGIN_SHA:0:8}) 存在上游没有的提交，直接镜像会丢弃本地改动。请先 rebase 到上游，或确认放弃后再手动运行。本地未改动任何内容。"
+            git log --oneline "${UPSTREAM_SHA}".."${ORIGIN_SHA}" | head -20 || true
+            exit 1
+          fi
+
           if [ -z "${SYNC_PAT:-}" ]; then
             WORKFLOW_DIFF="$(git diff --name-only "${ORIGIN_SHA}" "${UPSTREAM_SHA}" -- .github/workflows || true)"
             if [ -n "${WORKFLOW_DIFF}" ]; then
